@@ -1,38 +1,37 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
+import { db } from "./db";
+import {
+  calculations,
+  type Calculation,
+  type InsertCalculation
+} from "@shared/schema";
+import { desc } from "drizzle-orm";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  saveCalculation(calc: InsertCalculation & { result: string; latex: string }): Promise<Calculation>;
+  getHistory(): Promise<Calculation[]>;
+  clearHistory(): Promise<void>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-
-  constructor() {
-    this.users = new Map();
+export class DatabaseStorage implements IStorage {
+  async saveCalculation(calc: InsertCalculation & { result: string; latex: string }): Promise<Calculation> {
+    const [saved] = await db
+      .insert(calculations)
+      .values(calc)
+      .returning();
+    return saved;
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async getHistory(): Promise<Calculation[]> {
+    return await db
+      .select()
+      .from(calculations)
+      .orderBy(desc(calculations.createdAt))
+      .limit(50);
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async clearHistory(): Promise<void> {
+    await db.delete(calculations);
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
